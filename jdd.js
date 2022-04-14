@@ -52,7 +52,12 @@ function forEach(array, callback, scope) {
  */
 /*global jdd:true */
 var jdd = {
-
+    missings: {
+        leftFromRight: [],
+        rightFromLeft: [],
+        leftFromRightText: '',
+        rightFromLeftText: ''
+    },
     LEFT: 'left',
     RIGHT: 'right',
 
@@ -60,7 +65,7 @@ var jdd = {
     TYPE: 'type',
     MISSING: 'missing',
     diffs: [],
-	SEPARATOR: '/',
+    SEPARATOR: '/',
     requestCount: 0,
 
     /**
@@ -107,9 +112,14 @@ var jdd = {
                      * This means that the first data has a property which
                      * isn't present in the second data
                      */
-                    jdd.diffs.push(jdd.generateDiff(config1, jdd.generatePath(config1),
-                        config2, jdd.generatePath(config2),
-                        'Missing property <code>' + key + '</code> from the object on the right side', jdd.MISSING));
+                    //NOTE: left has
+                    //TODO: add the left has object
+                    const generated = jdd.generateDiff(config1, jdd.generatePath(config1), config2, jdd.generatePath(config2), 'Missing property <code>' + key + '</code> from the object on the right side', jdd.MISSING);
+                    const { path1: { path: path1 }, path2: { path: path2 } } = generated;
+                    const path = path1.replace('/', '').replaceAll('/', '.');
+                    jdd.missings.leftFromRight.push(path);
+                    // const path = 
+                    jdd.diffs.push(generated);
                 } else {
                     config2.currentPath.push(key.replace(jdd.SEPARATOR, '#'));
 
@@ -128,14 +138,18 @@ var jdd = {
          * weren't in object one and generate diffs for them.
          */
         for (key in data2) {
+            //NOTE: right has
+            //TODO: add the right has object
             if (data2.hasOwnProperty(key)) {
                 // no un-used vars
                 // val = data1[key];
 
                 if (!data1.hasOwnProperty(key)) {
-                    jdd.diffs.push(jdd.generateDiff(config1, jdd.generatePath(config1),
-                        config2, jdd.generatePath(config2, key),
-                        'Missing property <code>' + key + '</code> from the object on the left side', jdd.MISSING));
+                    const generated = jdd.generateDiff(config1, jdd.generatePath(config1), config2, jdd.generatePath(config2, key), 'Missing property <code>' + key + '</code> from the object on the left side', jdd.MISSING);
+                    const { path1: { path: path1 }, path2: { path: path2 } } = generated;
+                    const path = path2.replace('/', '').replaceAll('/', '.');
+                    jdd.missings.rightFromLeft.push(path);
+                    jdd.diffs.push(generated);
                 }
             }
         }
@@ -532,7 +546,6 @@ var jdd = {
         if (!pathObj2) {
             throw 'Unable to find line number for (' + msg + '): ' + path2;
         }
-
         return {
             path1: pathObj1,
             path2: pathObj2,
@@ -835,7 +848,56 @@ var jdd = {
         $('div.diffcontainer pre').text('');
         $('ul.toolbar').text('');
     },
+    outputMissings: function () {
+        const leftTag = $('#tag-left').val() || 'left';
+        const rightTag = $('#tag-right').val() || 'right';
+        const { leftFromRight, rightFromLeft } = jdd.missings;
 
+        if (leftFromRight.length) {
+            leftFromRight.forEach((el, ind) => {
+                jdd.missings.leftFromRightText += `${el}${ind + 1 === leftFromRight.length ? '' : ',\n'}`;
+            });
+        }
+
+        if (rightFromLeft.length) {
+            rightFromLeft.forEach((el, ind) => {
+                jdd.missings.rightFromLeftText += `${el}${ind + 1 === rightFromLeft.length ? '' : ',\n'}`;
+            });
+        }
+
+        const dialog = $('#dialog');
+        const html = `
+        <div>
+            <div style="padding-bottom: 1rem;">
+            <div style="display:flex; flex-direction: column; margin-bottom: 1rem;">
+                ${leftFromRight.length ? `<span style="margin-bottom: .5rem;">${leftTag} is missing the following:</span>
+                <textarea disabled style="margin-bottom: 1rem; border: 1px solid black;">${jdd.missings.leftFromRightText}</textarea>` : ''}
+            </div>
+
+            <div style="display:flex; flex-direction: column;">
+                ${rightFromLeft.length ? `<span style="margin-bottom: .5rem;">${rightTag} is missing the following:</span>
+                <textarea disabled style=" border: 1px solid black;">${jdd.missings.rightFromLeftText}</textarea>` : ''}
+            </div>
+            </div>
+
+            <button style="display: block;margin: 0 auto;text-transform: uppercase;" onclick="document.querySelector('#dialog').close();">close</button>
+
+        </div>
+        `;
+        dialog.on()
+        dialog.html(html);
+        dialog[0].showModal();
+
+        const textareasElements = $('#dialog textarea');
+        if (textareasElements && textareasElements[0]) {
+            textareasElements[0].style.height = textareasElements[0].scrollHeight + 'px';
+            textareasElements[0].style.width = textareasElements[0].scrollWidth + 'px';
+        }
+        if (textareasElements && textareasElements[1]) {
+            textareasElements[1].style.height = textareasElements[1].scrollHeight + 'px';
+            textareasElements[1].style.width = textareasElements[1].scrollWidth + 'px';
+        }
+    },
     /**
      * Generate the report section with the diff
      */
@@ -844,11 +906,20 @@ var jdd = {
 
         report.text('');
 
-        var newDiff = $('<button>Perform a new diff</button>');
-        report.append(newDiff);
-        newDiff.click(function () {
-            jdd.setupNewDiff();
-        });
+        report.append(`
+        <div>
+        <button onclick="jdd.outputMissings();">missing props report</button>
+        <button onclick="jdd.setupNewDiff();">Perform a new diff</button>
+        </div>
+        `);
+
+
+
+        // var newDiff = $('<button>Perform a new diff</button>');
+        // report.append(newDiff);
+        // newDiff.click(function () {
+        //     jdd.setupNewDiff();
+        // });
 
         if (jdd.diffs.length === 0) {
             report.append('<span>The two files were semantically  identical.</span>');

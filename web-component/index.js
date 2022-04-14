@@ -1,0 +1,3 @@
+class DiffTool extends HTMLElement{
+    
+}
